@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cyber Code</title>
+<style>
+:root{--bg:#0A141F;--card:#101D2C;--card2:#16273A;--teal:#2DD4BF;--txt:#F1F5F9;--mut:#7D8CA3}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--txt);display:flex;min-height:100vh}
+aside{width:210px;min-width:210px;background:#0C1723;border-right:1px solid #1b2f45;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.logo{display:flex;align-items:center;gap:8px;font-size:19px;font-weight:700;color:var(--teal);padding:6px 8px 16px}
+.nav{display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;color:var(--mut);cursor:pointer;font-size:15px;border:1px solid transparent}
+.nav.on{color:var(--teal);border-color:var(--teal);background:#0e2233}
+.nav .ic{font-size:19px;width:26px;text-align:center}
+main{flex:1;padding:14px;max-width:900px}
+.top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.top h2{font-size:22px;flex:1}
+.gear{background:none;border:0;color:var(--teal);font-size:20px;cursor:pointer}
+.card{background:var(--card);border:1px solid var(--teal);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h3{font-size:16px;margin-bottom:4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:10px}
+input[type=text]{width:100%;background:var(--card2);border:1px solid #23405c;color:var(--txt);border-radius:10px;padding:10px;font-size:14px}
+button{cursor:pointer}
+.btn{background:var(--card2);border:1px solid var(--teal);color:var(--teal);border-radius:10px;padding:9px 14px;font-size:14px}
+.item{background:var(--card2);border-radius:10px;padding:10px 12px;margin-top:8px;cursor:pointer;font-size:14px}
+.item small{color:var(--mut)}
+.tl{position:relative;padding-left:22px;margin-top:10px}
+.tl:before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:#23405c}
+.tl .e{position:relative;padding:7px 0;font-size:14px}
+.tl .e:before{content:"";position:absolute;left:-20px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--teal)}
+.tl .e.old:before{background:transparent;border:2px solid var(--mut)}
+.tl .e small{color:var(--mut)}
+.kv{font-size:14px;white-space:pre-line;line-height:1.65}
+.svc{display:inline-block;background:var(--card2);border:1px solid #23405c;border-radius:8px;padding:6px 10px;margin:4px 6px 0 0;font-size:13px}
+.up{color:var(--teal)} .down{color:#f87171}
+.view{display:none} .view.on{display:block}
+@media(max-width:640px){aside{width:64px;min-width:64px}aside .lbl{display:none}.logo span{display:none}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo">◉ <span>Cyber Code</span></div>
+  <div class="nav on" data-v="sesi"><span class="ic">◷</span><span class="lbl">Sesi Kerja</span></div>
+  <div class="nav" data-v="pc"><span class="ic">💻</span><span class="lbl">Cyber PC</span></div>
+  <div class="nav" data-v="server"><span class="ic">🗄</span><span class="lbl">Cyber Server</span></div>
+  <div class="nav" data-v="device"><span class="ic">📱</span><span class="lbl">Cyber Device</span></div>
+</aside>
+<main>
+  <div class="top"><h2 id="title">Sesi Kerja</h2><button class="gear" id="gear" title="Refresh">⚙</button></div>
+
+  <div class="view on" id="v-sesi">
+    <div class="card"><h3>Panel Kerja</h3><div class="sub" id="panelSub">Web OpenCode langsung di sini — pilih sesi di Riwayat untuk membukanya di panel ini. <a id="fullLink" href="https://opencode.cyberpos.my.id/" target="_blank" style="color:var(--teal)">Buka penuh ⧉</a></div>
+      <iframe id="ocFrame" src="https://opencode.cyberpos.my.id/" style="width:100%;height:620px;border:0;border-radius:10px;background:#fff"></iframe>
+    </div>
+    <div class="card"><h3>Riwayat Kerja</h3><div class="sub" id="sessCount">Memuat...</div>
+      <input type="text" id="q" placeholder="Cari sesi di Opencode">
+      <div class="tl" id="sessList"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-pc">
+    <div class="card"><h3>Cyber PC <span id="pcSt" class="sub"></span></h3><div class="kv" id="pcKv">Memuat...</div>
+      <div style="margin-top:10px"><button class="btn" id="pcRef">REFRESH</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-server">
+    <div class="card"><h3>Cyber Server <span id="svSt" class="sub"></span></h3><div class="kv" id="svKv">Memuat...</div>
+      <div id="svSvc"></div>
+      <div style="margin-top:10px"><button class="btn" id="svRef">REFRESH</button> <button class="btn" id="svLog">SIMPAN LOG</button></div>
+    </div>
+    <div class="card"><h3>Log Performa</h3><div class="tl" id="svHist"></div></div>
+  </div>
+
+  <div class="view" id="v-device">
+    <div class="card"><h3>Cyber Device (browser ini)</h3><div class="kv" id="dvKv">Memuat...</div></div>
+  </div>
+</main>
+<script>
+const OC='https://opencode.cyberpos.my.id', SYS='https://cyberpos.my.id', PC='https://pcmu.cyberpos.my.id';
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const fmtT=t=>{const d=new Date(t);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes())};
+const fmtD=s=>{s=Math.floor(s||0);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return (d>0?d+'h ':'')+pad(h)+':'+pad(m)+':'+pad(s%60)};
+const b64u=s=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+const KEY=b64u(OC);
+let sessions=[];
+document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>show(n.dataset.v));
+function show(v){
+  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+  $('v-'+v).classList.add('on');
+  $('title').textContent={sesi:'Sesi Kerja',pc:'Cyber PC',server:'Cyber Server',device:'Cyber Device'}[v];
+  if(v==='sesi'&&!sessions.length)loadSessions();
+  if(v==='pc')loadPc(); if(v==='server'){loadSv();loadHist();}
+  if(v==='device')loadDv();
+}
+$('gear').onclick=()=>{const v=document.querySelector('.view.on').id.slice(2);show(v);if(v==='sesi')loadSessions();};
+async function get(u){const r=await fetch(u);if(!r.ok)throw 0;return r.json();}
+async function loadSessions(){
+  try{
+    sessions=await get(OC+'/session');sessions.sort((a,b)=>(b.time.updated||0)-(a.time.updated||0));
+    drawSessions('');
+  }catch(e){$('sessCount').textContent='Offline — cek koneksi';}
+}
+function drawSessions(q){
+  q=q.trim().toLowerCase();
+  const f=sessions.filter(s=>!q||(s.title||'').toLowerCase().includes(q)||(s.slug||'').toLowerCase().includes(q));
+  $('sessCount').textContent='Riwayat kerja: '+f.length+'/'+sessions.length+' — tap untuk buka';
+  const box=$('sessList');box.innerHTML='';
+  const today=new Date().toDateString();
+  f.slice(0,50).forEach(s=>{
+    const d=document.createElement('div');
+    const old=new Date(s.time.updated||0).toDateString()!==today;
+    d.className='e'+(old?' old':'');
+    d.innerHTML='<small>'+fmtT(s.time.updated||Date.now())+'</small> — '+escapeHtml(s.title||s.slug||s.id);
+    d.onclick=()=>{
+      const url=OC+'/server/'+KEY+'/session/'+s.id;
+      $('ocFrame').src=url;
+      $('panelSub').childNodes[0].textContent='Membuka: '+(s.title||s.slug||s.id)+' — ';
+      $('ocFrame').scrollIntoView({behavior:'smooth',block:'start'});
+    };
+    box.appendChild(d);
+  });
+  if(!f.length)box.innerHTML='<div class="sub">Tidak ketemu.</div>';
+}
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+$('q').oninput=e=>drawSessions(e.target.value);
+function kvSys(j){
+  let s='Host: '+j.hostname+'\nOS: '+j.platform+' '+j.arch+' ('+j.release+')\nCPU: '+j.cpuModel+' x'+j.cpuCount+' @ '+j.cpuSpeed+'MHz\nLoad: '+j.load1+'\nRAM: '+j.usedMb+' / '+j.totalMb+' MB ('+j.ramPct+'%)\nUptime: '+fmtD(j.uptimeSecs);
+  if(j.diskTotalGb)s+='\nDisk free: '+j.diskFreeGb+' / '+j.diskTotalGb+' GB';
+  return s;
+}
+async function loadPc(){
+  try{const j=await get(PC+'/api/sys');$('pcSt').textContent='• ONLINE';$('pcKv').textContent=kvSys(j);}
+  catch(e){$('pcSt').textContent='• OFFLINE';}
+}
+async function loadSv(){
+  try{
+    const j=await get(SYS+'/api/sys');$('svSt').textContent='• ONLINE';
+    $('svKv').textContent=kvSys(j);
+    const sv=j.services||{};
+    $('svSvc').innerHTML=['backend:'+sv.backend,'opencode:'+sv.opencode,'tunnel:'+sv.tunnel,'POS(8000):'+j.pos8000,'Sesi:'+j.sessionCount]
+      .map(x=>'<span class="svc">'+escapeHtml(x)+'</span>').join('');
+  }catch(e){$('svSt').textContent='• OFFLINE';}
+}
+async function loadHist(){
+  try{
+    const h=await get(SYS+'/api/sys/history');const box=$('svHist');box.innerHTML='';
+    (h.history||[]).slice(0,30).forEach(x=>{
+      const d=document.createElement('div');d.className='e old';
+      d.innerHTML='<small>'+fmtT(x.time)+'</small> — RAM '+x.usedMb+'/'+x.totalMb+' MB ('+x.ramPct+'%) • Up '+fmtD(x.uptimeSecs);
+      box.appendChild(d);
+    });
+    if(!(h.history||[]).length)box.innerHTML='<div class="sub">Belum ada log.</div>';
+  }catch(e){}
+}
+$('pcRef').onclick=loadPc; $('svRef').onclick=()=>{loadSv();loadHist();};
+$('svLog').onclick=async()=>{try{await fetch(SYS+'/api/sys/log',{method:'POST'});}catch(e){} loadHist();};
+async function loadDv(){
+  let bat='-';try{const b=await navigator.getBattery();bat=Math.round(b.level*100)+'%'+(b.charging?' (charging)':'');}catch(e){}
+  let st='-';try{const s=await navigator.storage.estimate();st=(s.quota/1073741824).toFixed(1)+' GB quota';}catch(e){}
+  $('dvKv').textContent='Browser: '+navigator.userAgent.split(') ').pop()+'\nCPU cores: '+(navigator.hardwareConcurrency||'-')+'\nRAM device: '+(navigator.deviceMemory||'-')+' GB\nLayar: '+screen.width+'x'+screen.height+'\nBaterai: '+bat+'\nStorage: '+st+'\nOnline: '+navigator.onLine;
+}
+loadSessions();loadSv();
+setInterval(()=>{const v=document.querySelector('.view.on').id;if(v==='v-server')loadSv();if(v==='v-pc')loadPc();},15000);
+</script>
+</body>
+</html>

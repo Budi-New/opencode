@@ -1,0 +1,21 @@
+# ===== rahasia & runtime (JANGAN commit) =====
+*.log
+*.err.log
+history.json
+sys_history.json
+wa-bot/auth/
+wa-bot/*.log
+wa-bot/run*.log
+wa-bot/qr.png
+wa-bot/*.sh
+!wa-bot/setup-telecoder.sh
+wa-bot/node_modules/
+**/build/
+**/.gradle/
+CyberPosApp/local.properties
+local-m2/
+*.apk
+*.aab
+# ===== sistem =====
+.DS_Store
+Thumbs.db
