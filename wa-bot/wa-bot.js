@@ -3,7 +3,7 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
-const TARGET = '6287886084448@s.whatsapp.net';
+const TARGET = (process.env.WA_TARGET || '62800xxxxxxx') + '@s.whatsapp.net';
 const TEXT = 'hallo';
 const WAIT_MS = 5 * 60 * 1000;
 

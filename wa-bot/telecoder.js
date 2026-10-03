@@ -11,6 +11,9 @@ const OC = process.env.OPENCODE_BASE || 'http://127.0.0.1:4097';
 const ALLOWED = (process.env.ALLOWED_CHAT_ID || '').split(',').map((s) => s.trim()).filter(Boolean);
 const MODEL = { providerID: 'opencode', modelID: 'muse-spark-1.3-contributor-free' };
 const AGENT = 'build';
+const OC_AUTH = process.env.OPENCODE_AUTH || '';
+const ocHeaders = { 'Content-Type': 'application/json' };
+if (OC_AUTH) ocHeaders.Authorization = 'Basic ' + Buffer.from('opencode:' + OC_AUTH).toString('base64');
 
 if (!BOT) { console.error('TELEBOT_TOKEN kosong'); process.exit(1); }
 
@@ -38,7 +41,7 @@ async function oc(method, p, body, timeoutMs) {
   try {
     const r = await fetch(OC + p, {
       method: method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: ocHeaders,
       body: body ? JSON.stringify(body) : undefined,
       signal: ctl.signal,
     });

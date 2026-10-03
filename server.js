@@ -129,7 +129,12 @@ function serveFile(rel,type,res){
 }
 function proxyOc(req,res){
   const target=req.url.replace(/^\/oc-api/,'')||'/';
-  const opts={host:'127.0.0.1',port:4097,path:target,method:req.method,headers:{...req.headers,host:'127.0.0.1:4097'}};
+  const headers={...req.headers,host:'127.0.0.1:4097'};
+  try{
+    if(!global.__OCAUTH) global.__OCAUTH=require('fs').readFileSync(require('path').join(__dirname,'..','ocpass.txt'),'utf8').trim();
+    if(global.__OCAUTH) headers.authorization='Basic '+Buffer.from('opencode:'+global.__OCAUTH).toString('base64');
+  }catch(e){}
+  const opts={host:'127.0.0.1',port:4097,path:target,method:req.method,headers};
   const pr=http.request(opts,(prx)=>{
     res.writeHead(prx.statusCode||200,prx.headers);
     prx.pipe(res);

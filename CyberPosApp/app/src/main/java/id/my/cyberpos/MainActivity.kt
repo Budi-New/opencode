@@ -641,12 +641,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- RIWAYAT SESI OPENCODE (daftar + baca isi, native) ----
+    private fun opCookie(): String? {
+        // pakai sesi login WebView: user login sekali di tab SESI KERJA
+        return try { android.webkit.CookieManager.getInstance().getCookie(BASE) } catch (_: Exception) { null }
+    }
+
     private fun httpGetOp(path: String): String? {
         return try {
             val url = java.net.URL(BASE + path)
             val c = url.openConnection() as java.net.HttpURLConnection
             c.connectTimeout = 8000; c.readTimeout = 15000
             c.requestMethod = "GET"
+            opCookie()?.let { ck -> if (ck.isNotEmpty()) c.setRequestProperty("Cookie", ck) }
+            if (c.responseCode == 401) return "NEED_LOGIN"
             if (c.responseCode != 200) return null
             c.inputStream.bufferedReader().use { it.readText() }
         } catch (_: Exception) { null }
@@ -655,8 +662,13 @@ class MainActivity : AppCompatActivity() {
     private fun fetchOpSessions() {
         tvSessionCount.text = "Memuat riwayat..."
         Thread {
-            val resp = httpGetOp("/session") ?: run {
+            val resp = httpGetOp("/session")
+            if (resp == null) {
                 handler.post { tvSessionCount.text = "Offline — cek koneksi ke server" }
+                return@Thread
+            }
+            if (resp == "NEED_LOGIN") {
+                handler.post { tvSessionCount.text = "Belum login — buka tab SESI KERJA, login dulu, lalu refresh ⟳" }
                 return@Thread
             }
             try {
