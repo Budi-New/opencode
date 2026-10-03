@@ -19,3 +19,10 @@ local-m2/
 # ===== sistem =====
 .DS_Store
 Thumbs.db
+# ===== aset lokal besar / sampah build =====
+Logo Cyber 2.png
+missing.txt
+# ===== secret tambahan =====
+*.env
+bot.env
+ocpass.txt

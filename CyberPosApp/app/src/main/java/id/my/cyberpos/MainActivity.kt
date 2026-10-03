@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sessTitleRow: LinearLayout
     private val opSessions = ArrayList<OpSession>()
     private lateinit var prefs: SharedPreferences
+    private var authTried: Boolean = false
     private val dateFmt = SimpleDateFormat("dd/MM HH:mm:ss", Locale.getDefault())
     // SESI KERJA = OpenCode, jangan diganggu
     private val BASE = "https://opencode.cyberpos.my.id"
@@ -247,6 +248,26 @@ class MainActivity : AppCompatActivity() {
                     if (request?.isForMainFrame == true) {
                         Toast.makeText(this@MainActivity, "Web error: ${error?.description}", Toast.LENGTH_LONG).show()
                     }
+                }
+                override fun onReceivedHttpAuthRequest(view: WebView?, handler: HttpAuthHandler?, host: String?, realm: String?) {
+                    if (handler == null) return
+                    // coba kredensial tersimpan sekali; kalau gagal, tampilkan dialog
+                    if (!authTried) {
+                        authTried = true
+                        val u = prefs.getString("oc_user", "opencode") ?: "opencode"
+                        val p = prefs.getString("oc_pass", "") ?: ""
+                        if (p.isNotEmpty()) {
+                            handler.proceed(u, p)
+                            return
+                        }
+                    }
+                    showOcLogin { u, p ->
+                        prefs.edit().putString("oc_user", u).putString("oc_pass", p).apply()
+                        handler.proceed(u, p)
+                    }
+                }
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    authTried = false
                 }
             }
             webChromeClient = WebChromeClient()
@@ -641,9 +662,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- RIWAYAT SESI OPENCODE (daftar + baca isi, native) ----
-    private fun opCookie(): String? {
-        // pakai sesi login WebView: user login sekali di tab SESI KERJA
-        return try { android.webkit.CookieManager.getInstance().getCookie(BASE) } catch (_: Exception) { null }
+    private fun showOcLogin(onOk: (String, String) -> Unit) {
+        val lay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 16, 32, 0)
+        }
+        val etU = android.widget.EditText(this).apply {
+            hint = "Username"
+            setText(prefs.getString("oc_user", "opencode") ?: "opencode")
+        }
+        val etP = android.widget.EditText(this).apply {
+            hint = "Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        lay.addView(etU)
+        lay.addView(etP)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Login OpenCode")
+            .setMessage("Server butuh login (sama kayak di browser).")
+            .setView(lay)
+            .setPositiveButton("MASUK") { _, _ ->
+                onOk(etU.text.toString().trim(), etP.text.toString())
+            }
+            .setNegativeButton("BATAL", null)
+            .show()
+    }
+
+    private fun opAuth(): String? {
+        val u = prefs.getString("oc_user", "opencode") ?: "opencode"
+        val p = prefs.getString("oc_pass", "") ?: ""
+        if (p.isEmpty()) return null
+        val raw = (u + ":" + p).toByteArray(Charsets.UTF_8)
+        return "Basic " + android.util.Base64.encodeToString(raw, android.util.Base64.NO_WRAP)
     }
 
     private fun httpGetOp(path: String): String? {
@@ -652,7 +702,7 @@ class MainActivity : AppCompatActivity() {
             val c = url.openConnection() as java.net.HttpURLConnection
             c.connectTimeout = 8000; c.readTimeout = 15000
             c.requestMethod = "GET"
-            opCookie()?.let { ck -> if (ck.isNotEmpty()) c.setRequestProperty("Cookie", ck) }
+            opAuth()?.let { c.setRequestProperty("Authorization", it) }
             if (c.responseCode == 401) return "NEED_LOGIN"
             if (c.responseCode != 200) return null
             c.inputStream.bufferedReader().use { it.readText() }

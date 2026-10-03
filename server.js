@@ -200,9 +200,11 @@ const server = http.createServer((req,res)=>{
     let b=''; req.on('data',c=>b+=c); req.on('end',()=>{
       try{
         const {u,p}=JSON.parse(b||'{}');
-        if((u==='admin@cyberpos.my.id'&&p==='admin123')||(u==='admin'&&p==='admin123')){
+        const AU = process.env.CYBERPOS_ADMIN || 'admin@cyberpos.my.id';
+        const AP = process.env.CYBERPOS_PASS || 'admin123';
+        if((u===AU&&p===AP)||(u==='admin'&&p===AP)){
           res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({token:'cyberpos-auto-'+Date.now(),user:u}));
-        } else { res.writeHead(401,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:'user/pass salah. pakai admin@cyberpos.my.id / admin123'})); }
+        } else { res.writeHead(401,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:'user/pass salah'})); }
       }catch(e){ res.writeHead(400,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:'bad json'})); }
     }); return;
   }
