@@ -3,20 +3,49 @@ const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 
-// --- sesi login kasir: token acak 256-bit + kedaluwarsa (server-side) ---
+// --- sesi login kasir: token acak 256-bit + kedaluwarsa (server-side, persist file) ---
 const SESSIONS = new Map(); // token -> {user, exp}
 const TOKEN_TTL_MS = 12 * 3600 * 1000; // 12 jam
+const SESS_FILE = __dirname + '/sessions.json';
+try {
+  const raw = JSON.parse(fs.readFileSync(SESS_FILE, 'utf8') || '{}');
+  const now = Date.now();
+  for (const [t, s] of Object.entries(raw)) {
+    if (typeof t === 'string' && /^[0-9a-f]{64}$/.test(t) && s && typeof s.user === 'string' && typeof s.exp === 'number' && s.exp > now) {
+      SESSIONS.set(t, { user: s.user.slice(0, 256), exp: s.exp });
+      if (SESSIONS.size >= 500) break;
+    }
+  }
+} catch (e) {}
+function saveSessions(){
+  try {
+    const o = {};
+    for (const [t, s] of SESSIONS) { o[t] = s; if (Object.keys(o).length >= 500) break; }
+    fs.writeFileSync(SESS_FILE, JSON.stringify(o));
+  } catch (e) {}
+}
 function newSession(user){
   const t = crypto.randomBytes(32).toString('hex');
   SESSIONS.set(t, { user, exp: Date.now() + TOKEN_TTL_MS });
+  saveSessions();
   return t;
 }
+function tokenFromReq(req){
+  const h = req.headers['x-token'];
+  if (typeof h === 'string' && h.length) return h;
+  const c = req.headers['cookie'];
+  if (typeof c === 'string') {
+    const m = c.match(/(?:^|;\s*)cyberpos_token=([0-9a-f]{64})/);
+    if (m) return m[1];
+  }
+  return null;
+}
 function getSession(req){
-  const t = req.headers['x-token'];
-  if (!t || typeof t !== 'string') return null;
+  const t = tokenFromReq(req);
+  if (!t) return null;
   const s = SESSIONS.get(t);
   if (!s) return null;
-  if (s.exp < Date.now()) { SESSIONS.delete(t); return null; }
+  if (s.exp < Date.now()) { SESSIONS.delete(t); saveSessions(); return null; }
   return s;
 }
 function needAuth(req, res){
@@ -31,7 +60,9 @@ function needAuth(req, res){
 // bersih-bersih token kedaluwarsa tiap 15 menit (jangan tahan proses)
 setInterval(() => {
   const now = Date.now();
-  for (const [t, s] of SESSIONS) if (s.exp < now) SESSIONS.delete(t);
+  let changed = false;
+  for (const [t, s] of SESSIONS) if (s.exp < now) { SESSIONS.delete(t); changed = true; }
+  if (changed) saveSessions();
   // bersih-bersih rate-limit yang kedaluwarsa
   for (const [k, v] of RL) if (v.reset < now) RL.delete(k);
 }, 15 * 60 * 1000).unref();
@@ -336,7 +367,7 @@ const server = http.createServer((req,res)=>{
         if(u===AU && p===AP){
           if(!rateLimit('login-ok:'+ip, 30, 5*60*1000)) { rlDeny(res, 300); return; }
           const token = newSession(u);
-          res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({token,user:u,expHours:12}));
+          res.writeHead(200,{'Content-Type':'application/json','Set-Cookie':'cyberpos_token='+token+'; HttpOnly; Path=/; Max-Age=43200; SameSite=Lax'}); res.end(JSON.stringify({token,user:u,expHours:12}));
         } else {
           // samakan waktu respon biar tidak gampang user-enumeration via timing
           res.writeHead(401,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:'user/pass salah'}));
@@ -347,7 +378,13 @@ const server = http.createServer((req,res)=>{
   if(urlPath==='/api/logout' && req.method==='POST'){
     const t = req.headers['x-token'];
     if (t && typeof t === 'string') SESSIONS.delete(t);
-    res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:true})); return;
+    const ck = req.headers['cookie'];
+    if (typeof ck === 'string') {
+      const m = ck.match(/(?:^|;\s*)cyberpos_token=([0-9a-f]{64})/);
+      if (m) SESSIONS.delete(m[1]);
+    }
+    saveSessions();
+    res.writeHead(200,{'Content-Type':'application/json','Set-Cookie':'cyberpos_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax'}); res.end(JSON.stringify({ok:true})); return;
   }
   if(urlPath==='/api/checkout' && req.method==='POST'){
     if(!needAuth(req,res)) return;

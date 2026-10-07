@@ -1,4 +1,7 @@
-pluginManagement { repositories { maven { url = uri("file:///D:/Opencode/local-m2") }; google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { maven { url = uri("file:///D:/Opencode/local-m2") }; google(); mavenCentral() } }
+// local-m2 opsional: env CYBERPOS_M2 atau ../local-m2 relatif (tanpa path absolut D:/E:)
+def m2path = System.getenv("CYBERPOS_M2") ?: new File(settingsDir, "../local-m2").absolutePath
+def m2dir = new File(m2path)
+pluginManagement { repositories { if (m2dir.exists()) { maven { url = m2dir.toURI() } }; google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { if (m2dir.exists()) { maven { url = m2dir.toURI() } }; google(); mavenCentral() } }
 rootProject.name = "CyberPOS"
 include(":app")

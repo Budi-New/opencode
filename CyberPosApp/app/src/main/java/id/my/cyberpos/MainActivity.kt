@@ -154,6 +154,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        var encOk = true
         prefs = try {
             val masterKey = androidx.security.crypto.MasterKey.Builder(this)
                 .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
@@ -166,7 +167,23 @@ class MainActivity : AppCompatActivity() {
             )
         } catch (_: Exception) {
             // fallback HP lama tanpa keystore: tetap jalan, kredensial tidak terenkripsi
+            encOk = false
             getSharedPreferences("cyberpos_pc", Context.MODE_PRIVATE)
+        }
+        // migrasi sekali dari prefs plaintext lama, lalu wipe biar password tidak tertinggal di disk
+        if (encOk) {
+            try {
+                val old = getSharedPreferences("cyberpos_pc", Context.MODE_PRIVATE)
+                if (old.contains("oc_user") || old.contains("oc_pass")) {
+                    if ((prefs.getString("oc_user", null)).isNullOrEmpty() && (prefs.getString("oc_pass", null)).isNullOrEmpty()) {
+                        prefs.edit()
+                            .putString("oc_user", old.getString("oc_user", "opencode") ?: "opencode")
+                            .putString("oc_pass", old.getString("oc_pass", "") ?: "")
+                            .apply()
+                    }
+                    old.edit().clear().apply()
+                }
+            } catch (_: Exception) {}
         }
         loadLog()
 

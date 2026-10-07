@@ -3,6 +3,7 @@
 *.err.log
 history.json
 sys_history.json
+sessions.json
 wa-bot/auth/
 wa-bot/*.log
 wa-bot/run*.log
