@@ -33,7 +33,7 @@ def fetch(url, dest, tries=8):
 
 import glob
 blob = ''
-for path in glob.glob(r'D:\Opencode\missing.txt') + [r'D:\Opencode\build.log']:
+for path in [p for p in glob.glob(r'D:\Opencode\missing.txt') + [r'D:\Opencode\build.log'] if os.path.exists(p)]:
     for enc in ('utf-16', 'utf-8', 'cp1252'):
         try:
             with open(path, encoding=enc) as f:

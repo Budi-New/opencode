@@ -1,12 +1,11 @@
 plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 android {
     namespace 'id.my.cyberpos'
-    compileSdk 34
+    compileSdk 35
     defaultConfig {
         applicationId 'id.my.cyberpos'
         minSdk 24
-        // targetSdk tetap 34: platform android-35 belum ada di SDK lokal (hanya 34 + 37.0)
-        targetSdk 34
+        targetSdk 35
         versionCode 2
         versionName '1.1'
     }

@@ -3,33 +3,59 @@ const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 
-// tulis JSON atomik (tmp + rename) biar tidak korup saat concurrent write
-function saveJsonAtomic(path, obj){
+// tulis file atomik (tmp + rename) biar tidak korup saat concurrent write
+function saveStrAtomic(path, str){
   try {
     const tmp = path + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(obj));
+    fs.writeFileSync(tmp, str);
     fs.renameSync(tmp, path);
   } catch (e) {}
 }
+function saveJsonAtomic(path, obj){ saveStrAtomic(path, JSON.stringify(obj)); }
 
-// --- sesi login kasir: token acak 256-bit + kedaluwarsa (server-side, persist file) ---
+// --- sesi login kasir: token acak 256-bit + kedaluwarsa (server-side, persist terenkripsi) ---
 const SESSIONS = new Map(); // token -> {user, exp}
 const TOKEN_TTL_MS = 12 * 3600 * 1000; // 12 jam
 const SESS_FILE = __dirname + '/sessions.json';
-try {
-  const raw = JSON.parse(fs.readFileSync(SESS_FILE, 'utf8') || '{}');
-  const now = Date.now();
-  for (const [t, s] of Object.entries(raw)) {
-    if (typeof t === 'string' && /^[0-9a-f]{64}$/.test(t) && s && typeof s.user === 'string' && typeof s.exp === 'number' && s.exp > now) {
-      SESSIONS.set(t, { user: s.user.slice(0, 256), exp: s.exp });
-      if (SESSIONS.size >= 500) break;
+function sessKey(){
+  const k = process.env.CYBERPOS_SESS_KEY || '';
+  if (k.length < 16) return null; // persist butuh passphrase >=16 char
+  return crypto.createHash('sha256').update(k, 'utf8').digest();
+}
+const SESS_KEY = sessKey();
+if (!SESS_KEY) console.error('WARN: CYBERPOS_SESS_KEY kosong/pendek - sesi hanya in-memory (hilang saat restart). Set passphrase >=16 char untuk persist.');
+function sessDecrypt(blob){
+  try {
+    const o = JSON.parse(blob);
+    if (!o || o.v !== 1 || typeof o.iv !== 'string' || typeof o.tag !== 'string' || typeof o.data !== 'string') return null;
+    const d = crypto.createDecipheriv('aes-256-gcm', SESS_KEY, Buffer.from(o.iv, 'hex'));
+    d.setAuthTag(Buffer.from(o.tag, 'hex'));
+    return JSON.parse(d.update(o.data, 'hex', 'utf8') + d.final('utf8'));
+  } catch (e) { return null; }
+}
+function sessEncrypt(obj){
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', SESS_KEY, iv);
+  const data = c.update(JSON.stringify(obj), 'utf8', 'hex') + c.final('hex');
+  return JSON.stringify({ v: 1, iv: iv.toString('hex'), tag: c.getAuthTag().toString('hex'), data });
+}
+if (SESS_KEY) {
+  try {
+    const raw = sessDecrypt(fs.readFileSync(SESS_FILE, 'utf8') || '');
+    const now = Date.now();
+    if (raw) for (const [t, s] of Object.entries(raw)) {
+      if (typeof t === 'string' && /^[0-9a-f]{64}$/.test(t) && s && typeof s.user === 'string' && typeof s.exp === 'number' && s.exp > now) {
+        SESSIONS.set(t, { user: s.user.slice(0, 256), exp: s.exp });
+        if (SESSIONS.size >= 500) break;
+      }
     }
-  }
-} catch (e) {}
+  } catch (e) {}
+}
 function saveSessions(){
+  if (!SESS_KEY) return;
   const o = {};
   for (const [t, s] of SESSIONS) { o[t] = s; if (Object.keys(o).length >= 500) break; }
-  saveJsonAtomic(SESS_FILE, o);
+  try { saveStrAtomic(SESS_FILE, sessEncrypt(o)); } catch (e) {}
 }
 function newSession(user){
   const t = crypto.randomBytes(32).toString('hex');
@@ -104,13 +130,15 @@ const LOGIN_HTML = `<!DOCTYPE html><html><head><meta name="viewport" content="wi
 <p id="st"><small>Siap login otomatis</small></p>
 <script>
 async function autoLogin(){
-  document.getElementById('st').innerHTML='Login...';
+  const st=document.getElementById('st');
+  st.textContent='Login...';
   try{
     const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u:document.getElementById('u').value,p:document.getElementById('p').value})});
     const j = await r.json();
-    if(j.token){ localStorage.setItem('cyberpos_token', j.token); localStorage.setItem('cyberpos_user', j.user); location.href='/pos'; }
-    else document.getElementById('st').innerHTML='Gagal: '+j.error;
-  }catch(e){ document.getElementById('st').innerHTML='Error: '+e; }
+    // sesi via HttpOnly cookie (diset server) — token tidak disimpan di JS
+    if(r.ok){ location.href='/pos'; }
+    else st.textContent='Gagal: '+String(j.error||r.status);
+  }catch(e){ st.textContent='Error: '+e; }
 }
 if(new URLSearchParams(location.search).get('autologin')==='1'){ window.onload=()=>setTimeout(autoLogin,800); }
 </script></div></body></html>`;
@@ -121,16 +149,22 @@ const POS_HTML = `<!DOCTYPE html><html><head><meta name="viewport" content="widt
 <p id="u"></p><div class="grid" id="g"></div>
 <div id="cart"><h3>Keranjang (<span id="n">0</span>) Total: Rp <span id="t">0</span></h3><div id="items"></div><button onclick="checkout()">BAYAR</button><p id="rc"></p></div>
 <script>
-if(!localStorage.getItem('cyberpos_token')) location.href='/';
-document.getElementById('u').innerHTML='Sesi kerja: '+localStorage.getItem('cyberpos_user');
+(async function(){
+  try{
+    const r=await fetch('/api/me');
+    if(!r.ok){ location.href='/'; return; }
+    const j=await r.json();
+    document.getElementById('u').textContent='Sesi kerja: '+String(j.user||'');
+  }catch(e){ location.href='/'; }
+})();
 const P=[['Kopi Hitam',8000],['Kopi Susu',12000],['Teh Manis',5000],['Gorengan',2000],['Nasi Goreng',15000],['Mie Ayam',13000],['Es Teh',4000],['Roti Bakar',10000]];
 let C={};
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[c])); }
 function render(){ let g=document.getElementById('g'); g.textContent=''; P.forEach((p,i)=>{ const d=document.createElement('div'); d.className='item'; const b=document.createElement('b'); b.textContent=p[0]; d.appendChild(b); const pr=document.createElement('div'); pr.textContent='Rp '+Number(p[1]); d.appendChild(pr); const br=document.createElement('br'); d.appendChild(br); const btn=document.createElement('button'); btn.textContent='+ Tambah'; btn.onclick=()=>add(i); d.appendChild(btn); g.appendChild(d); }); }
 function add(i){ if(!Number.isInteger(i)||i<0||i>=P.length) return; C[i]=Math.min(100,(C[i]||0)+1); draw(); }
 function draw(){ let n=0,t=0,h=''; for(let k in C){ const q=C[k]; if(!Number.isInteger(q)||q<1) continue; n+=q; t+=q*Number(P[k][1]); h+=esc(P[k][0])+' x'+q+' = Rp '+(q*Number(P[k][1]))+'<br>'; } document.getElementById('n').textContent=n; document.getElementById('t').textContent=t; document.getElementById('items').innerHTML=h; }
-async function checkout(){ const rc=document.getElementById('rc'); if(!Object.keys(C).length){ rc.textContent='Keranjang kosong'; return; } const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json','X-Token':localStorage.getItem('cyberpos_token')},body:JSON.stringify({cart:C})}); if(r.status===401){ location.href='/'; return; } const j=await r.json(); rc.textContent='Lunas! Struk: '+String(j.receipt||'-')+' Total Rp '+Number(j.total||0); C={}; draw(); }
-async function logout(){ try{ await fetch('/api/logout',{method:'POST',headers:{'X-Token':localStorage.getItem('cyberpos_token')}}); }catch(e){} localStorage.clear(); location.href='/'; }
+async function checkout(){ const rc=document.getElementById('rc'); if(!Object.keys(C).length){ rc.textContent='Keranjang kosong'; return; } const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cart:C})}); if(r.status===401){ location.href='/'; return; } const j=await r.json(); rc.textContent='Lunas! Struk: '+String(j.receipt||'-')+' Total Rp '+Number(j.total||0); C={}; draw(); }
+async function logout(){ try{ await fetch('/api/logout',{method:'POST'}); }catch(e){} location.href='/'; }
 render();
 </script></body></html>`;
 
@@ -148,7 +182,7 @@ async function load(save){
   const j=await (await fetch('/api/sys')).json();
   document.getElementById('sys').innerText=
     'Host: '+j.hostname+'\\nOS: '+j.platform+' '+j.arch+' ('+j.release+')\\nCPU: '+j.cpuModel+' x'+j.cpuCount+' @ '+j.cpuSpeed+' MHz\\nRAM: '+j.usedMb+' / '+j.totalMb+' MB ('+j.ramPct+'%)\\nUptime: '+fmtUptime(j.uptimeSecs)+'\\nLoad: '+j.load1+', '+j.load5+', '+j.load15+(j.diskTotalGb?'\\nDisk: '+j.diskFreeGb+' / '+j.diskTotalGb+' GB free':'')+'\\nServices backend: '+(j.services?j.services.backend:'-')+' • opencode: '+(j.services?j.services.opencode:'-')+' • tunnel: '+(j.services?j.services.tunnel:'-')+'\\nPOS(8000): '+j.pos8000+' • Sesi OpenCode: '+j.sessionCount;
-  if(save){ const tk=localStorage.getItem('cyberpos_token')||''; if(!tk){ document.getElementById('hc').textContent='login dulu untuk simpan log'; } else { await fetch('/api/sys/log',{method:'POST',headers:{'X-Token':tk}}); } }
+  if(save){ const rr=await fetch('/api/sys/log',{method:'POST'}); if(rr.status===401){ document.getElementById('hc').textContent='login dulu untuk simpan log'; } }
   const h=await (await fetch('/api/sys/history')).json();
   document.getElementById('hc').textContent=(h.history||[]).length;
   document.getElementById('hist').innerHTML=(h.history||[]).map(x=>{ const t=new Date(Number(x.time)||0).toLocaleString(); const um=Number(x.usedMb)||0, tm=Number(x.totalMb)||0, rp=Number(x.ramPct)||0; return '<div style="background:#1e293b;border-radius:8px;padding:8px;margin:6px 0">'+escH(t)+'<br>RAM '+um+'/'+tm+' MB ('+rp+'%) • Up '+fmtUptime(x.uptimeSecs)+'</div>'; }).join('')||'<p style="text-align:center;color:#94a3b8">Belum ada log</p>';
@@ -314,6 +348,12 @@ function allowCors(req,res){
 }
 
 const server = http.createServer((req,res)=>{
+  const t0 = Date.now();
+  res.on('finish', () => {
+    const p = String(req.url || '').split('?')[0];
+    if (p === '/api/sys' || p === '/api/sys/history' || p === '/health') return; // skip polling bising
+    console.log(new Date().toISOString() + ' ' + req.method + ' ' + p + ' -> ' + res.statusCode + ' ' + (Date.now() - t0) + 'ms');
+  });
   allowCors(req,res);
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Referrer-Policy','no-referrer');
@@ -322,7 +362,13 @@ const server = http.createServer((req,res)=>{
   if(req.url==='/' || req.url.startsWith('/?')){ res.writeHead(200,{'Content-Type':'text/html'}); res.end(LOGIN_HTML); return; }
   if(urlPath==='/dash'||urlPath==='/dash/'){ serveFile('dash/index.html','text/html',res); return; }
   if(urlPath.startsWith('/dash/')){ serveFile(urlPath.slice(1), mimeOf(urlPath.split('#')[0]), res); return; }
-  if(req.url.startsWith('/oc-api/')){ proxyOc(req,res); return; }
+  if(req.url.startsWith('/oc-api/')){
+    const s = needAuth(req,res);
+    if(!s) return;
+    if(!rateLimit('ocapi:'+clientIp(req), 600, 5*60*1000)) { rlDeny(res, 300); return; }
+    proxyOc(req,res); return;
+  }
+  if(urlPath==='/api/me'){ const s = needAuth(req,res); if(!s) return; res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({user:s.user})); return; }
   if(urlPath==='/pos'){ res.writeHead(200,{'Content-Type':'text/html'}); res.end(POS_HTML); return; }
   if(urlPath==='/monitor'){ res.writeHead(200,{'Content-Type':'text/html'}); res.end(MONITOR_HTML); return; }
   if(urlPath==='/api/sys'){ res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(pcSys())); return; }
@@ -420,3 +466,11 @@ const server = http.createServer((req,res)=>{
   res.writeHead(404); res.end('not found');
 });
 server.listen(PORT,HOST,()=>console.log(`CyberPOS backend http://${HOST}:${PORT} -> https://cyberpos.my.id`));
+function shutdown(sig){
+  try { console.log('shutdown ' + sig); } catch (e) {}
+  try { saveSessions(); saveSysHist(); saveHist(); } catch (e) {}
+  try { server.close(() => process.exit(0)); } catch (e) { process.exit(0); }
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

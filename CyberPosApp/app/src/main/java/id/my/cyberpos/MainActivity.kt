@@ -156,12 +156,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         var encOk = true
         prefs = try {
-            val masterKey = androidx.security.crypto.MasterKey.Builder(this)
-                .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
-                .build()
+            // overload alias (non-deprecated di security-crypto 1.1.0): tanpa MasterKey/Builder
             androidx.security.crypto.EncryptedSharedPreferences.create(
-                this, "cyberpos_pc_enc",
-                masterKey,
+                "cyberpos_pc_enc",
+                "cyberpos_master_key",
+                this,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
