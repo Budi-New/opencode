@@ -3,6 +3,15 @@ const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 
+// tulis JSON atomik (tmp + rename) biar tidak korup saat concurrent write
+function saveJsonAtomic(path, obj){
+  try {
+    const tmp = path + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj));
+    fs.renameSync(tmp, path);
+  } catch (e) {}
+}
+
 // --- sesi login kasir: token acak 256-bit + kedaluwarsa (server-side, persist file) ---
 const SESSIONS = new Map(); // token -> {user, exp}
 const TOKEN_TTL_MS = 12 * 3600 * 1000; // 12 jam
@@ -18,11 +27,9 @@ try {
   }
 } catch (e) {}
 function saveSessions(){
-  try {
-    const o = {};
-    for (const [t, s] of SESSIONS) { o[t] = s; if (Object.keys(o).length >= 500) break; }
-    fs.writeFileSync(SESS_FILE, JSON.stringify(o));
-  } catch (e) {}
+  const o = {};
+  for (const [t, s] of SESSIONS) { o[t] = s; if (Object.keys(o).length >= 500) break; }
+  saveJsonAtomic(SESS_FILE, o);
 }
 function newSession(user){
   const t = crypto.randomBytes(32).toString('hex');
@@ -228,8 +235,7 @@ function pcSys(){
 const SYS_HIST_FILE = __dirname + '/sys_history.json';
 let SYS_HISTORY = [];
 try { SYS_HISTORY = JSON.parse(fs.readFileSync(SYS_HIST_FILE,'utf8')||'[]'); } catch(e){ SYS_HISTORY = []; }
-let lastSysLog = 0;
-function saveSysHist(){ try{ fs.writeFileSync(SYS_HIST_FILE, JSON.stringify(SYS_HISTORY.slice(0,100))); }catch(e){} }
+function saveSysHist(){ saveJsonAtomic(SYS_HIST_FILE, SYS_HISTORY.slice(0,100)); }
 
 function mimeOf(p){
   if(p.endsWith('.js'))return 'application/javascript';
@@ -263,18 +269,21 @@ function proxyOc(req,res){
     if(!global.__OCAUTH) global.__OCAUTH=require('fs').readFileSync(require('path').join(__dirname,'..','ocpass.txt'),'utf8').trim();
     if(global.__OCAUTH) headers.authorization='Basic '+Buffer.from('opencode:'+global.__OCAUTH).toString('base64');
   }catch(e){}
-  const opts={host:'127.0.0.1',port:4097,path:target,method:req.method,headers};
+  const opts={host:'127.0.0.1',port:4097,path:target,method:req.method,headers,timeout:30000};
+  let done = false;
+  const fail = (code, body) => { if (done || res.headersSent) return; done = true; try { res.writeHead(code,{'Content-Type':'application/json'}); res.end(body); } catch (e) {} };
   const pr=http.request(opts,(prx)=>{
+    if (done) { prx.resume(); return; }
     res.writeHead(prx.statusCode||200,prx.headers);
+    prx.on('error', () => { try { res.end(); } catch (e) {} });
     prx.pipe(res);
   });
-  pr.on('error',()=>{ res.writeHead(502,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:'opencode down'})); });
+  pr.on('timeout',()=>{ try { pr.destroy(); } catch (e) {} fail(504, JSON.stringify({error:'opencode timeout'})); });
+  pr.on('error',()=>{ fail(502, JSON.stringify({error:'opencode down'})); });
   req.pipe(pr);
 }
-function autoLogSys(){
-  const now = Date.now();
-  if (now - lastSysLog < 10000) return; // max 1x per 10 detik biar tidak spam
-  lastSysLog = now;
+// GET /api/sys murni baca (tanpa efek-samping tulis) — tulis log hanya via POST /api/sys/log (auth)
+function forceSysLog(){
   const s = pcSys();
   SYS_HISTORY.unshift({time: s.time, ramPct: s.ramPct, usedMb: s.usedMb, totalMb: s.totalMb, uptimeSecs: s.uptimeSecs});
   SYS_HISTORY = SYS_HISTORY.slice(0,100); saveSysHist();
@@ -287,7 +296,7 @@ function pcState(){ const now=Date.now(); return {tarif:TARIF_PER_JAM,pcs:PCS.ma
 const HIST_FILE = __dirname + '/history.json';
 let HISTORY = [];
 try { HISTORY = JSON.parse(fs.readFileSync(HIST_FILE,'utf8')||'[]'); } catch(e){ HISTORY = []; }
-function saveHist(){ try{ fs.writeFileSync(HIST_FILE, JSON.stringify(HISTORY.slice(0,100))); }catch(e){} }
+function saveHist(){ saveJsonAtomic(HIST_FILE, HISTORY.slice(0,100)); }
 
 // CORS hanya untuk endpoint publik (baca + login). Endpoint ber-auth
 // tidak kirim CORS header supaya situs lain tidak bisa memakainya.
@@ -316,13 +325,13 @@ const server = http.createServer((req,res)=>{
   if(req.url.startsWith('/oc-api/')){ proxyOc(req,res); return; }
   if(urlPath==='/pos'){ res.writeHead(200,{'Content-Type':'text/html'}); res.end(POS_HTML); return; }
   if(urlPath==='/monitor'){ res.writeHead(200,{'Content-Type':'text/html'}); res.end(MONITOR_HTML); return; }
-  if(urlPath==='/api/sys'){ autoLogSys(); res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(pcSys())); return; }
+  if(urlPath==='/api/sys'){ res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(pcSys())); return; }
   if(urlPath==='/api/sys/history'){ res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({history:SYS_HISTORY})); return; }
   if(urlPath==='/api/sys/log' && req.method==='POST'){
     if(!needAuth(req,res)) return;
     const ip = clientIp(req);
     if(!rateLimit('syslog:'+ip, 10, 5*60*1000)) { rlDeny(res, 60); return; }
-    autoLogSys(); lastSysLog = 0; autoLogSys(); res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:true,history:SYS_HISTORY})); return;
+    forceSysLog(); res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:true,history:SYS_HISTORY})); return;
   }
   if(urlPath==='/api/sys/clear' && req.method==='POST'){ if(!needAuth(req,res)) return; SYS_HISTORY=[]; saveSysHist(); res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:true})); return; }
   if(urlPath==='/api/pcs'){ res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(pcState())); return; }

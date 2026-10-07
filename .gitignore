@@ -1,6 +1,7 @@
 # ===== rahasia & runtime (JANGAN commit) =====
 *.log
 *.err.log
+watchdog.log
 history.json
 sys_history.json
 sessions.json

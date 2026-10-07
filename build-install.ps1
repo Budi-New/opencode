@@ -1,8 +1,12 @@
-# Build debug APK + install ke device 9a9e4f65
+# Build debug APK + install ke device (env ANDROID_SERIAL, default 9a9e4f65)
 $ErrorActionPreference="Stop"
+$root = $PSScriptRoot
+if (!$root) { $root = "D:\Opencode" }
+$device = $env:ANDROID_SERIAL
+if (!$device) { $device = "9a9e4f65" }
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_SDK_ROOT=$env:ANDROID_HOME
-Set-Location "D:\Opencode\CyberPosApp"
+Push-Location "$root\CyberPosApp"
 # download gradle wrapper jar jika belum ada (pinned ke tag v8.7.0, bukan master)
 if(!(Test-Path ".\gradle\wrapper\gradle-wrapper.jar")){
   New-Item -ItemType Directory -Force -Path ".\gradle\wrapper" | Out-Null
@@ -17,7 +21,7 @@ if(!(Test-Path ".\gradle\wrapper\gradle-wrapper.jar")){
       throw "SHA256 gradle-wrapper.jar tidak cocok. Set GRADLE_WRAPPER_SHA256 yang benar."
     }
   } else {
-    Write-Warning "GRADLE_WRAPPER_SHA256 belum di-set — hash di atas belum diverifikasi. Set env untuk pin penuh."
+    Write-Warning "GRADLE_WRAPPER_SHA256 belum di-set - hash di atas belum diverifikasi. Set env untuk pin penuh."
   }
 }
 @"
@@ -32,8 +36,9 @@ if(!(Test-Path ".\gradlew.bat")){
   Set-Content ".\gradlew.bat" 'java -cp "gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain %*'
 }
 .\gradlew.bat assembleDebug --no-daemon
-$apk="app\build\outputs\apk\debug\app-debug.apk"
+Pop-Location
+$apk="$root\CyberPosApp\app\build\outputs\apk\debug\app-debug.apk"
 adb devices
-adb -s 9a9e4f65 install -r $apk
-adb -s 9a9e4f65 shell am start -n id.my.cyberpos/.MainActivity
-Write-Host "SELESAI: APK terinstall & auto-login jalan ke https://cyberpos.my.id"
+adb -s $device install -r $apk
+adb -s $device shell am start -n id.my.cyberpos/.MainActivity
+Write-Host "SELESAI: APK terinstall ke $device & auto-login jalan ke https://cyberpos.my.id"
