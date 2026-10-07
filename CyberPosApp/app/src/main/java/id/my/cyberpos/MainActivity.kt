@@ -92,10 +92,8 @@ class MainActivity : AppCompatActivity() {
     private val BASE = "https://opencode.cyberpos.my.id"
     // MONITOR SERVER = backend di server Ubuntu (publik)
     private val API_BASE = "https://cyberpos.my.id"
-    // MONITOR PC INI = DESKTOP (publik dulu, fallback WiFi LAN)
+    // MONITOR PC INI = DESKTOP via HTTPS publik (tanpa fallback cleartext HTTP)
     private val API_PC0 = "https://pcmu.cyberpos.my.id"
-    private val API_PC1 = "http://192.168.1.16:8002"
-    private val API_PC2 = "http://192.168.0.100:8002"
 
     // 0 = OpenCode, 1 = Server, 2 = Hardware HP, 3 = PC ini
     private var mode = 0
@@ -156,7 +154,20 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        prefs = getSharedPreferences("cyberpos_pc", Context.MODE_PRIVATE)
+        prefs = try {
+            val masterKey = androidx.security.crypto.MasterKey.Builder(this)
+                .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            androidx.security.crypto.EncryptedSharedPreferences.create(
+                this, "cyberpos_pc_enc",
+                masterKey,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (_: Exception) {
+            // fallback HP lama tanpa keystore: tetap jalan, kredensial tidak terenkripsi
+            getSharedPreferences("cyberpos_pc", Context.MODE_PRIVATE)
+        }
         loadLog()
 
         val layout = LinearLayout(this).apply {
@@ -373,8 +384,13 @@ class MainActivity : AppCompatActivity() {
             perfLog.clear()
             saveLog()
             refreshLogUI()
-            Thread { httpPost("/api/sys/clear", "{}") }.start()
-            Toast.makeText(this, "Log dihapus (HP + PC)", Toast.LENGTH_SHORT).show()
+            // /api/sys/clear butuh login kasir; tanpa sesi, log PC tidak ikut terhapus
+            Thread {
+                val ok = httpPost("/api/sys/clear", "{}") != null
+                handler.post {
+                    Toast.makeText(this, if (ok) "Log dihapus (HP + PC)" else "Log HP dihapus. Log PC butuh login Sesi Kerja dulu.", Toast.LENGTH_LONG).show()
+                }
+            }.start()
         }
         logContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -590,21 +606,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- MONITOR PC INI (DESKTOP via WiFi, tanpa log) ----
+    // ---- MONITOR PC INI (HTTPS saja, tanpa fallback HTTP cleartext) ----
     private fun httpGetPc(path: String): Pair<String, String?> {
-        for (base in arrayOf(API_PC0, API_PC1, API_PC2)) {
-            try {
-                val url = java.net.URL(base + path)
-                val c = url.openConnection() as java.net.HttpURLConnection
-                c.connectTimeout = 4000; c.readTimeout = 4000
-                c.requestMethod = "GET"
-                if (c.responseCode == 200) {
-                    val body = c.inputStream.bufferedReader().use { it.readText() }
-                    return Pair(base, body)
-                }
-            } catch (_: Exception) {}
-        }
-        return Pair("", null)
+        return try {
+            require(API_PC0.startsWith("https://")) { "PC base harus HTTPS" }
+            val url = java.net.URL(API_PC0 + path)
+            val c = url.openConnection() as javax.net.ssl.HttpsURLConnection
+            c.connectTimeout = 4000; c.readTimeout = 4000
+            c.requestMethod = "GET"
+            if (c.responseCode == 200) {
+                val body = c.inputStream.bufferedReader().use { it.readText() }
+                Pair(API_PC0, body)
+            } else Pair("", null)
+        } catch (_: Exception) { Pair("", null) }
     }
 
     private fun fetchPcIni() {
@@ -623,7 +637,7 @@ class MainActivity : AppCompatActivity() {
                 handler.post {
                     tvPcIniStatus.text = if (!cached.isNullOrEmpty())
                         "Status: OFFLINE — data terakhir ${dateFmt.format(Date(cachedTime))}"
-                    else "Status: OFFLINE (butuh internet / satu WiFi dengan PC)"
+                    else "Status: OFFLINE (butuh internet ke https://pcmu.cyberpos.my.id)"
                 }
                 return@Thread
             }

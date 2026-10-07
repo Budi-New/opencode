@@ -2,11 +2,23 @@
 $ErrorActionPreference="Stop"
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_SDK_ROOT=$env:ANDROID_HOME
-Set-Location "E:\Opencode\CyberPosApp"
-# download gradle wrapper jar jika belum ada
+Set-Location "D:\Opencode\CyberPosApp"
+# download gradle wrapper jar jika belum ada (pinned ke tag v8.7.0, bukan master)
 if(!(Test-Path ".\gradle\wrapper\gradle-wrapper.jar")){
   New-Item -ItemType Directory -Force -Path ".\gradle\wrapper" | Out-Null
-  Invoke-WebRequest -Uri "https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar" -OutFile ".\gradle\wrapper\gradle-wrapper.jar"
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $wrapperUrl = "https://github.com/gradle/gradle/raw/v8.7.0/gradle/wrapper/gradle-wrapper.jar"
+  Invoke-WebRequest -Uri $wrapperUrl -OutFile ".\gradle\wrapper\gradle-wrapper.jar"
+  $hash = (Get-FileHash ".\gradle\wrapper\gradle-wrapper.jar" -Algorithm SHA256).Hash.ToLower()
+  Write-Host "gradle-wrapper.jar SHA256: $hash"
+  if($env:GRADLE_WRAPPER_SHA256){
+    if($hash -ne $env:GRADLE_WRAPPER_SHA256.ToLower()){
+      Remove-Item ".\gradle\wrapper\gradle-wrapper.jar" -Force
+      throw "SHA256 gradle-wrapper.jar tidak cocok. Set GRADLE_WRAPPER_SHA256 yang benar."
+    }
+  } else {
+    Write-Warning "GRADLE_WRAPPER_SHA256 belum di-set — hash di atas belum diverifikasi. Set env untuk pin penuh."
+  }
 }
 @"
 distributionBase=GRADLE_USER_HOME

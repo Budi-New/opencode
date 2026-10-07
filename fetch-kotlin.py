@@ -1,7 +1,7 @@
 import ssl, urllib.request, os, time
-ctx = ssl._create_unverified_context()
+ctx = ssl.create_default_context()
 URL = 'https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-compiler-embeddable/1.9.22/kotlin-compiler-embeddable-1.9.22.jar'
-DEST = r'E:\Opencode\local-m2\org\jetbrains\kotlin\kotlin-compiler-embeddable\1.9.22\kotlin-compiler-embeddable-1.9.22.jar'
+DEST = r'D:\Opencode\local-m2\org\jetbrains\kotlin\kotlin-compiler-embeddable\1.9.22\kotlin-compiler-embeddable-1.9.22.jar'
 CHUNK = 64 * 1024
 os.makedirs(os.path.dirname(DEST), exist_ok=True)
 # get total

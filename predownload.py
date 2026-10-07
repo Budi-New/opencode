@@ -1,6 +1,6 @@
 import ssl, urllib.request, os, re, time
-ctx = ssl._create_unverified_context()
-base = r'E:\Opencode\local-m2'
+ctx = ssl.create_default_context()
+base = r'D:\Opencode\local-m2'
 CHUNK = 512 * 1024
 
 def fetch(url, dest, tries=8):
@@ -33,7 +33,7 @@ def fetch(url, dest, tries=8):
 
 import glob
 blob = ''
-for path in glob.glob(r'E:\Opencode\missing.txt') + [r'E:\Opencode\build.log']:
+for path in glob.glob(r'D:\Opencode\missing.txt') + [r'D:\Opencode\build.log']:
     for enc in ('utf-16', 'utf-8', 'cp1252'):
         try:
             with open(path, encoding=enc) as f:

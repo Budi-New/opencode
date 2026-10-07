@@ -157,7 +157,7 @@ async function loadHist(){
   }catch(e){}
 }
 $('pcRef').onclick=loadPc; $('svRef').onclick=()=>{loadSv();loadHist();};
-$('svLog').onclick=async()=>{try{await fetch(SYS+'/api/sys/log',{method:'POST'});}catch(e){} loadHist();};
+$('svLog').onclick=async()=>{try{const tk=localStorage.getItem('cyberpos_token')||'';const r=await fetch(SYS+'/api/sys/log',{method:'POST',headers:tk?{'X-Token':tk}:{}});if(r.status===401)alert('Login dulu di halaman utama untuk simpan log');}catch(e){} loadHist();};
 async function loadDv(){
   let bat='-';try{const b=await navigator.getBattery();bat=Math.round(b.level*100)+'%'+(b.charging?' (charging)':'');}catch(e){}
   let st='-';try{const s=await navigator.storage.estimate();st=(s.quota/1073741824).toFixed(1)+' GB quota';}catch(e){}

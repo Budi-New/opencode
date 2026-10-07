@@ -16,6 +16,7 @@ const ocHeaders = { 'Content-Type': 'application/json' };
 if (OC_AUTH) ocHeaders.Authorization = 'Basic ' + Buffer.from('opencode:' + OC_AUTH).toString('base64');
 
 if (!BOT) { console.error('TELEBOT_TOKEN kosong'); process.exit(1); }
+if (!ALLOWED.length) { console.error('ALLOWED_CHAT_ID kosong - fail-closed: tolak semua. Set ALLOWED_CHAT_ID=chat_id_anda'); process.exit(1); }
 
 let state = { offset: 0, chats: {} };
 try { state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) {}
@@ -95,7 +96,7 @@ async function handleUpdate(u) {
   const msg = u.message;
   if (!msg || !msg.text) return;
   const chatId = String(msg.chat.id);
-  if (ALLOWED.length && !ALLOWED.includes(chatId)) {
+  if (!ALLOWED.includes(chatId)) {
     await reply(msg.chat.id, 'Maaf, bot ini privat.');
     return;
   }
